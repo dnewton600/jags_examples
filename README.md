@@ -5,7 +5,7 @@ This is a central repository for some of the Jags (MCMC library) files I have wr
 Below is an example (taken from [example_run_rjags.Rmd](example_run_rjags.Rmd) ) of how to run mcmc for a varying slope/intercept model. The model data, parameters to save, and initializations will of course need to change based on the particular application, but I think it is at least useful to have a basic template. 
 
 References:
- * The interlab examples have involved input from the other authors in [this](https://www.nist.gov/publications/decision-tree-key-comparisons) publication.
+ * The interlab examples have involved input from the other authors [Possolo et al (2021)](https://www.nist.gov/publications/decision-tree-key-comparisons) publication.
  * The skew-t distribution uses the stochastic represenation discussed in [Abanto-Valle et al (2013)](https://www.researchgate.net/publication/228440980_Bayesian_Estimation_of_a_Skew-Student-t_Stochastic_Volatility_Model).
 
 ```
