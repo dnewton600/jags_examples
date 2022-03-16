@@ -2,7 +2,7 @@
 
 This is a central repository for some of the Jags (MCMC library) files I have written for various statistical inference problems. Included are several flavors of hierarchical models. 
 
-Below is an example (taken from [example_run_rjags.Rmd]) of how to run mcmc for a varying slope/intercept model. The model data, parameters to save, and initializations will of course need to change based on the particular application, but I think it is at least useful to have a basic template.
+Below is an example (taken from [example_run_rjags.Rmd](example_run_rjags.Rmd) ) of how to run mcmc for a varying slope/intercept model. The model data, parameters to save, and initializations will of course need to change based on the particular application, but I think it is at least useful to have a basic template.
 
 ```
 model_data = list(
