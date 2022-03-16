@@ -27,7 +27,7 @@ model_inits = function() {
 
 
 jags_out = jags(data = model_data,
-                inits = NULL,
+                inits = model_inits,
                 model.file='jags_model.txt',
                 parameters.to.save = parameters_to_save,
                 n.chains = 4,
