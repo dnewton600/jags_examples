@@ -1,0 +1,198 @@
+---
+title: "Bayesian Multilevel Model: Varying Slope and Intercept Example"
+author: "David"
+date: "3/14/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(R2jags)
+```
+
+### Create Data
+
+```{r}
+set.seed(1234)
+n_per_group = 15
+n_groups = 5
+n_total = n_per_group*n_groups
+
+
+mu_beta_0 = 10 # true slope
+sigma_beta_0 = 10 # between-group slope variability
+
+mu_beta_1 = 5 # true slope
+sigma_beta_1 = 1 # between-group slope variability
+
+sigma_eps = 1
+
+beta_0 = rep(rnorm(n_groups,mean=mu_beta_0,sd=sigma_beta_0),each=n_per_group)
+beta_1 = rep(rnorm(n_groups,mean=mu_beta_1,sd=sigma_beta_1),each=n_per_group)
+
+the_x = runif(n_total,0,10)
+
+mydata = data.frame(y=beta_0 + beta_1*the_x + rnorm(n_total,sd=sigma_eps),
+                    x=the_x,
+                    group=rep(1:n_groups,each=n_per_group))
+print(head(mydata))
+ggplot(mydata,aes(x=x,y=y,col=factor(group))) + geom_point()
+ggplot(mydata,aes(x=x,y=y,col=factor(group))) + geom_point() + geom_smooth(method='lm',se=F,size=.1)
+```
+
+In summary, we have `r n_groups` groups, and `r n_per_group` observations in each group. The true population slope is `r mu_beta_1`, but there is a random group effect which is normally distributed with standard deviation `r sigma_beta_1` (and similarly for the intercept).
+
+The full model can be expressed as
+
+$$
+b_{0,i} \sim N(\beta_0,\sigma^2_{0}) \\
+b_{1,i} \sim N(\beta_1,\sigma^2_{1}) \\
+\epsilon_{ij} \overset{iid}{\sim} N(0,\sigma^2) \\
+y_{ij} = b_{0,i} + b_{1,i} x_{ij} + \epsilon_{ij}
+$$
+
+where the $i$th index refers to the group, and the $j$th index refers to the $j$th observation within that group. To simplify notation, we will let $\beta, b, \sigma^2$ represent vectors of the associated parameters.
+
+To fit the Bayesian version of `lmer()`, we need to write the posterior distribution of $p(\beta, b, \sigma^2|x,y)$. Doing the typical $p(\theta|x) \propto p(x|\theta) p(\theta)$ move, we have
+$$
+p(\beta, b, \sigma^2|x,y) 
+\propto p(x,y|\beta, b, \sigma^2) p(\beta, b, \sigma^2) \\
+= p(x,y|b,\sigma_{\epsilon}^2)p(b|\beta,\sigma_{1,2}^2)p(\beta,\sigma^2)
+$$
+The parametric form of the probability distributions $p(x,y|...)$ and $p(b|...)$ are known (Gaussian), so all we need for the RHS is an expression for $p(\beta,\sigma^2)$. This is not a trivial choice, and choosing priors in general is a large area of research. In this setting, we'll simply go with the non-informative priors of
+$$
+\beta_1, \beta_0 \sim N(0,\sigma^2 = 1000) \\
+\sigma \sim t_4(scale=100)
+$$
+
+So our full model (including priors) is then:
+$$
+\beta_1, \beta_0 \sim N(0,\sigma^2 = 1000) \\
+\sigma \sim t_4(scale=100) \\
+b_{0,i} \sim N(\beta_0,\sigma^2_{0}) \\
+b_{1,i} \sim N(\beta_1,\sigma^2_{1}) \\
+\epsilon_{ij} \overset{iid}{\sim} N(0,\sigma^2) \\
+y_{ij} = b_{0,i} + b_{1,i} x_{ij} + \epsilon_{ij}
+$$
+### Model in Jags
+```{r}
+mod_string = "
+model{
+    # Top level parameters (Priors)
+    beta_0 ~ dnorm(0,1/1000^2)
+    beta_1 ~ dnorm(0,1/1000^2)
+    sigma_0 ~ dt(0,1/100^2,4)T(0,)
+    sigma_1 ~ dt(0,1/100^2,4)T(0,)
+    sigma_eps ~ dt(0,1/100^2,4)T(0,)
+    
+    # Group parameters
+    for(ii in 1:N_groups){
+      b0[ii] ~ dnorm(beta_0,1/sigma_0^2)
+      b1[ii] ~ dnorm(beta_1,1/sigma_1^2)
+    }
+
+    # observed values (likelihood)
+    for(ii in 1:N){
+        y[ii] ~ dnorm(b0[groups[ii]] + b1[groups[ii]]*x[ii], 1/sigma_eps^2)
+    }            
+        
+}"
+```
+
+### Run that model
+```{r}
+model_data = list(
+  N = nrow(mydata), # number of observations
+  N_groups = length(unique(mydata$group)), # number of labs
+  groups = mydata$group,
+  y = mydata$y,
+  x = mydata$x
+)
+
+parameters_to_save = c('beta_0','beta_1','sigma_0','sigma_1','sigma_eps')
+
+model_inits = function() {
+  list(
+    beta_0=rnorm(1,5,1),
+    beta_1=rnorm(1,1,1),
+    sigma_0=rexp(1/2),
+    sigma_1=rexp(1/2),
+    sigma_eps=rexp(1/2)
+  )
+}
+
+
+jags_out = jags(data = model_data,
+                inits = NULL,
+                model.file=textConnection(mod_string),
+                parameters.to.save = parameters_to_save,
+                n.chains = 4,
+                n.thin=2,
+                n.iter = 10000,
+                n.burnin = 2000,
+                quiet=TRUE)
+
+p_samples = jags_out$BUGSoutput$sims.list
+
+full_data = rbind(
+  data.frame(value=p_samples$beta_0,param='beta_0'),
+  data.frame(value=p_samples$beta_1,param='beta_1'),
+  data.frame(value=p_samples$sigma_0,param='sigma_0'),
+  data.frame(value=p_samples$sigma_1,param='sigma_1'),
+  data.frame(value=p_samples$sigma_eps,param='sigma_eps')
+)
+
+```
+
+### Posterior Samples (vertical line is the true value, for reference)
+```{r}
+true_parameters = c(mu_beta_0,mu_beta_1,sigma_beta_0,sigma_beta_1,sigma_eps)
+for(ii in 1:length(parameters_to_save)) {
+  t_param = parameters_to_save[ii]
+  the_median = median(p_samples[[t_param]])
+  p = ggplot(full_data[full_data$param == t_param,],aes(x=value,fill=param)) + geom_density() +
+    geom_vline(xintercept=true_parameters[ii]) +
+    ggtitle(paste("Posterior samples for",t_param,'; posterior median =',round(the_median,1))) + xlab(t_param)
+  print(p)
+}
+
+
+```
+
+We can then answer questions like...
+
+
+What is our estimate for the overall (combined across groups) slope?
+```{r}
+quantile(p_samples$beta_1,c(.025,.25,.5,.75,.975))
+```
+
+What is the probability that the overall slope is greater than 0?
+```{r}
+mean(p_samples$beta_1 > 1)
+```
+
+What is our estimate for the standard deviations in slopes between the groups?
+```{r}
+quantile(p_samples$sigma_1,c(.025,.25,.5,.75,.975))
+```
+
+What is our estimate for the standard deviations in slopes between the groups, relative to the experimental (within-group) error?
+```{r}
+quantile(p_samples$sigma_1/p_samples$sigma_eps,c(.025,.25,.5,.75,.975))
+```
+
+And so on...
+
+### Fixed Effect comparison
+```{r}
+full_mod = lm(y~x+factor(group)+factor(group):x,data=mydata)
+simple_mod = lm(y~x+factor(group),data=mydata)
+
+summary(full_mod)
+summary(simple_mod)
+
+anova(simple_mod,full_mod)
+
+```

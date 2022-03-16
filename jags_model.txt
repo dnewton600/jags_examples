@@ -1,0 +1,17 @@
+model {
+
+  
+  mu ~ dnorm(mu_mu,1/mu_scl^2) # overall mean
+  tau ~ dt(0,1/sd_lab_means^2,4)T(0,) # interlab variance
+  
+  sigma ~ dt(0,1/mean_lab_sds^2,4)T(0,)
+  
+  for(ii in 1:N_labs) {
+    lambda[ii] ~ dnorm(mu,1/tau^2) # random effects
+  }
+
+  for(ii in 1:N) {
+    y[ii] ~ dnorm(lambda[lab[ii]], 1/sigma^2 )
+  }
+
+}
